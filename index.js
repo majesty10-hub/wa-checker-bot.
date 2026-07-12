@@ -1,105 +1,114 @@
+const { default: makeWASocket, useMultiFileAuthState, delay } = require('@whiskeysockets/baileys');
 const TelegramBot = require('node-telegram-bot-api');
-const { default: makeWASocket, useMultiFileAuthState, delay, DisconnectReason } = require('@whiskeysockets/baileys');
 const pino = require('pino');
-const axios = require('axios');
 const fs = require('fs');
 
-const TELEGRAM_BOT_TOKEN = "8900613624:AAGHTnoVyf_Uia52E_fYNTDa-sYk9EJuzic";
+// TOKEN BOT TELEGRAM LANGSUNG MASUK DI SINI
+const TELEGRAM_TOKEN = '8900613624:AAGHTnoVyf_Uia52E_fYNTDa-sYk9EJuzic';
 
-const BotClass = TelegramBot.default || TelegramBot;
-const bot = new BotClass(TELEGRAM_BOT_TOKEN, { polling: true });
-let sock = null;
-let isConnecting = false;
+const tgBot = new TelegramBot(TELEGRAM_TOKEN, { polling: true });
+let waSock = null;
+let isPairing = false;
 
-function sendMenu(chatId) {
-    bot.sendMessage(chatId, "🤖 **WS CHECKER v4.2 (Cloud Edition)**\n\nSesi login Anda sekarang tersimpan di server cloud.", {
-        parse_mode: 'Markdown',
-        reply_markup: {
-            inline_keyboard: [
-                [{ text: "🔗 Sambungkan Sender", callback_data: "sambungkan" }],
-                [{ text: "📊 Cek Status", callback_data: "status" }]
-            ]
-        }
-    });
-}
-
-async function hubungkanKeWhatsApp(nomorHPTumbal, chatId, isRetry = false) {
-    if (isConnecting && !isRetry) return;
-    isConnecting = true;
-
-    const { state, saveCreds } = await useMultiFileAuthState('sesi_wa');
-    
-    sock = makeWASocket({ 
-        auth: state, 
-        logger: pino({ level: 'silent' }), 
-        printQRInTerminal: false,
-        connectTimeoutMs: 60000,
-        defaultQueryTimeoutMs: 0
-    });
-
-    sock.ev.on('creds.update', saveCreds);
-
-    sock.ev.on('connection.update', async (update) => {
-        const { connection, lastDisconnect } = update;
-        
-        if (connection === 'close') {
-            isConnecting = false;
-            const statusCode = lastDisconnect?.error?.output?.statusCode;
-            
-            if (statusCode !== DisconnectReason.loggedOut) {
-                await delay(8000); 
-                hubungkanKeWhatsApp(nomorHPTumbal, chatId, true);
-            } else {
-                bot.sendMessage(chatId, "🛑 **Sender Terputus!** Sesi dihapus.");
-                if (fs.existsSync('sesi_wa')) fs.rmSync('sesi_wa', { recursive: true, force: true });
-            }
-        } 
-        else if (connection === 'open') {
-            isConnecting = false;
-            if (sock.user && sock.user.id) {
-                bot.sendMessage(chatId, `🎉 **SENDER WHATSAPP AKTIF**`, { parse_mode: 'Markdown' });
-            }
-        }
-    });
-
-    setTimeout(async () => {
-        if (sock && !sock.authState.creds.registered && !isRetry && nomorHPTumbal) {
-            try {
-                let nomorBersih = nomorHPTumbal.replace(/[^0-9]/g, '');
-                if (nomorBersih.startsWith('08')) nomorBersih = '628' + nomorBersih.slice(2);
-                
-                const code = await sock.requestPairingCode(nomorBersih);
-                const teksKode = code?.match(/.{1,4}/g)?.join('-') || code;
-                
-                bot.sendMessage(chatId, `🔑 **KODE PAIRING ANDA:**\n\n\`${teksKode}\``, { parse_mode: 'Markdown' });
-            } catch (err) {
-                isConnecting = false;
-                bot.sendMessage(chatId, "❌ Gagal mendapatkan kode pairing.");
-            }
-        }
-    }, 3000);
-}
-
-if (fs.existsSync('sesi_wa') && fs.readdirSync('sesi_wa').length > 0) {
-    hubungkanKeWhatsApp(null, null, true);
-}
-
-bot.on('callback_query', (query) => {
-    const chatId = query.message.chat.id;
-    if (query.data === 'sambungkan') {
-        if (sock && sock.user) return bot.sendMessage(chatId, `✅ Perangkat sudah terhubung.`);
-        bot.sendMessage(chatId, "Masukkan nomor WA tumbal Anda (Contoh: 08xxxxxxxxxx):", { reply_markup: { force_reply: true } });
-    } else if (query.data === 'status') {
-        const isReady = (sock && sock.user && sock.user.id);
-        bot.sendMessage(chatId, `📊 **Status:** ${isReady ? "🟢 Aktif" : "🔴 Mati"}`);
-    }
+tgBot.onText(/\/start/, (msg) => {
+    const chatId = msg.chat.id;
+    const menu = `🤖 *WS CHECKER v5.0 (GitHub Actions Edition)*\n\n` +
+                 `Status: ${waSock ? '🟢 Terhubung' : '🔴 Mati'}\n\n` +
+                 `🔹 /kirimkode - Sambungkan WhatsApp via Pairing Code\n` +
+                 `🔹 /cek [nomor] - Cek status nomor WhatsApp\n` +
+                 `🔹 /help - Panduan format nomor`;
+    tgBot.sendMessage(chatId, menu, { parse_mode: 'Markdown' });
 });
 
-bot.on('message', async (msg) => {
+tgBot.onText(/\/kirimkode/, (msg) => {
     const chatId = msg.chat.id;
-    if (!msg.text) return;
+    isPairing = true;
+    tgBot.sendMessage(chatId, '📞 Masukkan nomor WA tumbal Anda.\nFormat harus angka saja tanpa spasi/tanda (+), contoh: *0882020925445*', { parse_mode: 'Markdown' });
+});
 
-    if (msg.reply_to_message && msg.reply_to_message.text && msg.reply_to_message.text.includes('Masukkan nomor WA tumbal')) {
+tgBot.on('message', async (msg) => {
+    const chatId = msg.chat.id;
+    const text = msg.text ? msg.text.trim() : '';
+
+    if (isPairing && /^\d+$/.test(text)) {
+        isPairing = false;
+        tgBot.sendMessage(chatId, '⏳ Sedang meminta kode pairing dari WhatsApp, mohon tunggu...');
+        
+        try {
+            const { state, saveCreds } = await useMultiFileAuthState('github_session');
+            
+            waSock = makeWASocket({
+                auth: state,
+                logger: pino({ level: 'silent' }),
+                printQRInTerminal: false
+            });
+
+            waSock.ev.on('creds.update', saveCreds);
+
+            waSock.ev.on('connection.update', async (update) => {
+                const { connection } = update;
+                if (connection === 'open') {
+                    tgBot.sendMessage(chatId, '✅ *WhatsApp Berhasil Terhubung!*', { parse_mode: 'Markdown' });
+                    
+                    // Trik Cerdas: Mengirimkan file sesi ke Telegram agar tidak amnesia
+                    setTimeout(() => {
+                        if (fs.existsSync('./github_session/creds.json')) {
+                            const credsData = fs.readFileSync('./github_session/creds.json', 'utf-8');
+                            const base64Session = Buffer.from(credsData).toString('base64');
+                            tgBot.sendMessage(chatId, `🔑 *SALIN & SIMPAN SESI INI* 🔑\n\nJika bot mati, Anda cukup simpan kode ini:\n\n\`${base64Session}\``, { parse_mode: 'Markdown' });
+                        }
+                    }, 5000);
+                }
+                if (connection === 'close') {
+                    waSock = null;
+                }
+            });
+
+            // Otomatis ubah format 08xxx menjadi format internasional 628xxx
+            let formattedNum = text;
+            if (formattedNum.startsWith('0')) {
+                formattedNum = '62' + formattedNum.slice(1);
+            }
+            
+            await delay(3000);
+            let code = await waSock.requestPairingCode(formattedNum);
+            code = code?.match(/.{1,4}/g)?.join('-') || code;
+            
+            tgBot.sendMessage(chatId, `🔑 *KODE PAIRING ANDA:* \`${code}\`\n\nSilakan masukkan kode tersebut di WhatsApp -> Perangkat Tertaut.`, { parse_mode: 'Markdown' });
+
+        } catch (err) {
+            tgBot.sendMessage(chatId, `❌ Gagal memproses pairing: ${err.message}`);
+            isPairing = false;
+        }
+    } else if (text.startsWith('/cek')) {
+        if (!waSock) {
+            return tgBot.sendMessage(chatId, '🔴 Bot belum terhubung ke WhatsApp. Silakan hubungkan dulu via /kirimkode');
+        }
+        
+        const args = text.split(' ');
+        if (args.length < 2) {
+            return tgBot.sendMessage(chatId, '❌ Format salah. Contoh: `/cek 0882020925445`', { parse_mode: 'Markdown' });
+        }
+
+        let targetNum = args[1].replace(/[^0-9]/g, '');
+        if (targetNum.startsWith('0')) {
+            targetNum = '62' + targetNum.slice(1);
+        }
+
+        tgBot.sendMessage(chatId, `🔍 Sedang mengecek nomor: +${targetNum}...`);
+
+        try {
+            const [result] = await waSock.onWhatsApp(targetNum);
+            if (result && result.exists) {
+                tgBot.sendMessage(chatId, `✅ *Status:* Nomor +${targetNum} *Aktif* di WhatsApp.`, { parse_mode: 'Markdown' });
+            } else {
+                tgBot.sendMessage(chatId, `❌ *Status:* Nomor +${targetNum} *Tidak Terdaftar* di WhatsApp.`, { parse_mode: 'Markdown' });
+            }
+        } catch (error) {
+            tgBot.sendMessage(chatId, `⚠️ Terjadi kesalahan saat mengecek: ${error.message}`);
+        }
+    }
+});
         hubungkanKeWhatsApp(msg.text, chatId, false);
         return;
     }
