@@ -41,11 +41,20 @@ tgBot.on('message', async (msg) => {
                 auth: state,
                 logger: pino({ level: 'silent' }),
                 printQRInTerminal: false,
-                // Mengubah browser agent agar dikenali sebagai Google Chrome resmi oleh WhatsApp
-                browser: Browsers.ubuntu('Chrome')
+                browser: Browsers.ubuntu('Chrome'),
+                // Optimasi Jaringan: Memaksa koneksi tetap hidup dan stabil
+                connectTimeoutMs: 60000,
+                keepAliveIntervalMs: 30000
             });
 
             waSock.ev.on('creds.update', saveCreds);
+
+            waSock.ev.on('connection.update', (update) => {
+                const { connection } = update;
+                if (connection === 'open') {
+                    tgBot.sendMessage(chatId, '✅ <b>WhatsApp Berhasil Terhubung!</b> Bot siap digunakan.', { parse_mode: 'HTML' });
+                }
+            });
 
             let formattedNum = text.replace(/[^0-9]/g, '');
             await delay(3000);
@@ -60,6 +69,6 @@ tgBot.on('message', async (msg) => {
         } catch (err) {
             tgBot.sendMessage(chatId, `❌ <b>Eror:</b> <code>${err.message}</code>`, { parse_mode: 'HTML' });
         }
-    } 
-    // ... bagian /cek tetap sama ...
+    }
+    // ... bagian /cek tetap aman ...
 });
