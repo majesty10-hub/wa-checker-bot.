@@ -3,8 +3,13 @@ const TelegramBot = require('node-telegram-bot-api');
 const pino = require('pino');
 const fs = require('fs');
 
-// TOKEN BOT TELEGRAM LANGSUNG MASUK DI SINI
-const TELEGRAM_TOKEN = '8900613624:AAGHTnoVyf_Uia52E_fYNTDa-sYk9EJuzic';
+// Mengambil token otomatis dari GitHub Secrets yang kamu buat tadi
+const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;
+
+if (!TELEGRAM_TOKEN) {
+    console.error("ERROR: TELEGRAM_TOKEN belum diatur di GitHub Secrets!");
+    process.exit(1);
+}
 
 const tgBot = new TelegramBot(TELEGRAM_TOKEN, { polling: true });
 let waSock = null;
@@ -64,7 +69,7 @@ tgBot.on('message', async (msg) => {
                 }
             });
 
-            // Otomatis ubah format 08xxx menjadi format internasional 628xxx
+            // Otomatis merapikan format nomor 08xxx -> 628xxx
             let formattedNum = text;
             if (formattedNum.startsWith('0')) {
                 formattedNum = '62' + formattedNum.slice(1);
@@ -100,6 +105,15 @@ tgBot.on('message', async (msg) => {
         try {
             const [result] = await waSock.onWhatsApp(targetNum);
             if (result && result.exists) {
+                tgBot.sendMessage(chatId, `✅ *Status:* Nomor +${targetNum} *Aktif* di WhatsApp.`, { parse_mode: 'Markdown' });
+            } else {
+                tgBot.sendMessage(chatId, `❌ *Status:* Nomor +${targetNum} *Tidak Terdaftar* di WhatsApp.`, { parse_mode: 'Markdown' });
+            }
+        } catch (error) {
+            tgBot.sendMessage(chatId, `⚠️ Terjadi kesalahan saat mengecek: ${error.message}`);
+        }
+    }
+});
                 tgBot.sendMessage(chatId, `✅ *Status:* Nomor +${targetNum} *Aktif* di WhatsApp.`, { parse_mode: 'Markdown' });
             } else {
                 tgBot.sendMessage(chatId, `❌ *Status:* Nomor +${targetNum} *Tidak Terdaftar* di WhatsApp.`, { parse_mode: 'Markdown' });
