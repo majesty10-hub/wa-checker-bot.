@@ -1,4 +1,4 @@
-const { default: makeWASocket, useEphemeralState, delay } = require('@whiskeysockets/baileys');
+const { default: makeWASocket, delay } = require('@whiskeysockets/baileys');
 const TelegramBot = require('node-telegram-bot-api');
 const pino = require('pino');
 
@@ -12,6 +12,20 @@ if (!TELEGRAM_TOKEN) {
 const tgBot = new TelegramBot(TELEGRAM_TOKEN, { polling: true });
 let waSock = null;
 let isPairing = false;
+
+// Objek kosong untuk menyimpan state memori sementara tanpa menulis file
+let mockState = {
+    creds: {
+        registrationId: 0,
+        advSecretKey: "",
+        nextPreKeyId: 1,
+        firstUnuploadedPreKeyId: 1,
+        accountSettings: { unarchiveChats: false },
+        deviceId: "GitHub-Actions-Bot",
+        phoneId: "Baileys-Engine"
+    },
+    keys: {}
+};
 
 // ==========================================
 // TAMPILAN MENU UTAMA (AESTHETIC STYLE)
@@ -63,8 +77,12 @@ tgBot.on('message', async (msg) => {
         tgBot.sendMessage(chatId, '⏳ <i>Sedang menyiapkan mesin & meminta kode dari server WhatsApp...</i>', { parse_mode: 'HTML' });
         
         try {
+            // Menggunakan memory state tiruan yang aman dari sistem file read-only
             waSock = makeWASocket({
-                auth: useEphemeralState(),
+                auth: {
+                    state: mockState,
+                    saveCreds: () => {} // abaikan penyimpanan file
+                },
                 logger: pino({ level: 'silent' }),
                 printQRInTerminal: false
             });
