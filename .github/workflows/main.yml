@@ -1,7 +1,7 @@
 name: Jalankan WA Checker Bot
 
 on:
-  workflow_dispatch: # Biar bisa dinyalain manual pakai tombol
+  workflow_dispatch:
 
 jobs:
   run-bot:
@@ -13,11 +13,12 @@ jobs:
       - name: Siapkan Node.js
         uses: actions/setup-node@v3
         with:
-          node-version: 18
+          node-version: '20'
 
       - name: Install Dependencies
         run: npm install
 
       - name: Jalankan Bot
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
         run: node index.js
-
