@@ -16,17 +16,13 @@ let isPairing = false;
 
 tgBot.onText(/\/start/, (msg) => {
     const chatId = msg.chat.id;
-    const menu = `🤖 *WS CHECKER v5.0 (GitHub Actions Edition)*\n\n` +
-                 `Status: ${waSock ? '🟢 Terhubung' : '🔴 Mati'}\n\n` +
-                 `🔹 /kirimkode - Sambungkan WhatsApp via Pairing Code\n` +
-                 `🔹 /cek [nomor] - Cek status nomor WhatsApp`;
-    tgBot.sendMessage(chatId, menu, { parse_mode: 'Markdown' });
+    tgBot.sendMessage(chatId, "🤖 *WA Checker Bot Aktif!*\n\nKetik /kirimkode untuk mulai pairing.", { parse_mode: 'Markdown' });
 });
 
 tgBot.onText(/\/kirimkode/, (msg) => {
     const chatId = msg.chat.id;
     isPairing = true;
-    tgBot.sendMessage(chatId, '📞 Masukkan nomor WA tumbal Anda.\nFormat harus angka saja, contoh: *0882020925445*', { parse_mode: 'Markdown' });
+    tgBot.sendMessage(chatId, '📞 Masukkan nomor WA tumbal Anda (contoh: 0882020925445)', { parse_mode: 'Markdown' });
 });
 
 tgBot.on('message', async (msg) => {
@@ -35,71 +31,50 @@ tgBot.on('message', async (msg) => {
 
     if (isPairing && /^\d+$/.test(text)) {
         isPairing = false;
-        tgBot.sendMessage(chatId, '⏳ Sedang meminta kode pairing, mohon tunggu...');
+        tgBot.sendMessage(chatId, '⏳ Sedang menyiapkan mesin WhatsApp...');
         
         try {
             const { state, saveCreds } = await useMultiFileAuthState('github_session');
             
+            // Inisialisasi socket
             waSock = makeWASocket({
                 auth: state,
                 logger: pino({ level: 'silent' }),
                 printQRInTerminal: false
             });
 
+            if (!waSock) {
+                throw new Error("Gagal menginisialisasi socket.");
+            }
+
             waSock.ev.on('creds.update', saveCreds);
 
-            waSock.ev.on('connection.update', async (update) => {
+            waSock.ev.on('connection.update', (update) => {
                 const { connection } = update;
                 if (connection === 'open') {
-                    tgBot.sendMessage(chatId, '✅ *WhatsApp Berhasil Terhubung!*', { parse_mode: 'Markdown' });
-                    
-                    setTimeout(() => {
-                        if (fs.existsSync('./github_session/creds.json')) {
-                            const credsData = fs.readFileSync('./github_session/creds.json', 'utf-8');
-                            const base64Session = Buffer.from(credsData).toString('base64');
-                            tgBot.sendMessage(chatId, `🔑 *SALIN & SIMPAN SESI INI* 🔑\n\n\`${base64Session}\``, { parse_mode: 'Markdown' });
-                        }
-                    }, 5000);
-                }
-                if (connection === 'close') {
-                    waSock = null;
+                    tgBot.sendMessage(chatId, '✅ *Berhasil Terhubung!*', { parse_mode: 'Markdown' });
                 }
             });
 
-            let formattedNum = text;
-            if (formattedNum.startsWith('0')) {
-                formattedNum = '62' + formattedNum.slice(1);
-            }
+            let formattedNum = text.startsWith('0') ? '62' + text.slice(1) : text;
             
             await delay(3000);
-            let code = await waSock.requestPairingCode(formattedNum);
-            code = code?.match(/.{1,4}/g)?.join('-') || code;
             
-            tgBot.sendMessage(chatId, `🔑 *KODE PAIRING:* \`${code}\``, { parse_mode: 'Markdown' });
+            // Memastikan waSock benar-benar ada sebelum meminta kode
+            if (waSock && typeof waSock.requestPairingCode === 'function') {
+                let code = await waSock.requestPairingCode(formattedNum);
+                code = code?.match(/.{1,4}/g)?.join('-') || code;
+                tgBot.sendMessage(chatId, `🔑 *KODE PAIRING:* \`${code}\``, { parse_mode: 'Markdown' });
+            } else {
+                tgBot.sendMessage(chatId, "❌ Mesin bot tidak merespons. Coba lagi nanti.");
+            }
+
         } catch (err) {
-            tgBot.sendMessage(chatId, `❌ Gagal: ${err.message}`);
+            tgBot.sendMessage(chatId, `❌ Eror: ${err.message}`);
             isPairing = false;
         }
-    } else if (text.startsWith('/cek')) {
-        if (!waSock) return tgBot.sendMessage(chatId, '🔴 Bot belum terhubung. Ketik /kirimkode dulu');
-        
-        const args = text.split(' ');
-        if (args.length < 2) return tgBot.sendMessage(chatId, '❌ Format: `/cek 0882020925445`', { parse_mode: 'Markdown' });
-
-        let targetNum = args[1].replace(/[^0-9]/g, '');
-        if (targetNum.startsWith('0')) targetNum = '62' + targetNum.slice(1);
-
-        tgBot.sendMessage(chatId, `🔍 Mengecek: +${targetNum}...`);
-
-        try {
-            const [result] = await waSock.onWhatsApp(targetNum);
-            if (result && result.exists) {
-                tgBot.sendMessage(chatId, `✅ Nomor +${targetNum} *Aktif*`, { parse_mode: 'Markdown' });
-            } else {
-                tgBot.sendMessage(chatId, `❌ Nomor +${targetNum} *Tidak Terdaftar*`, { parse_mode: 'Markdown' });
-            }
-        } catch (error) {
-            tgBot.sendMessage(chatId, `⚠️ Error: ${error.message}`);
+    }
+});
         }
     }
 });
