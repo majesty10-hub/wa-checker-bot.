@@ -1,29 +1,17 @@
-const { default: makeWASocket, initAuthCreds, delay } = require('@whiskeysockets/baileys');
+const { default: makeWASocket, useMultiFileAuthState, delay } = require('@whiskeysockets/baileys');
 const TelegramBot = require('node-telegram-bot-api');
 const pino = require('pino');
 
 const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;
 
 if (!TELEGRAM_TOKEN) {
-    console.error("❌ [ERROR] TELEGRAM_TOKEN belum diatur di GitHub Secrets!");
+    console.error("❌ [ERROR] TELEGRAM_TOKEN belum diatur!");
     process.exit(1);
 }
 
 const tgBot = new TelegramBot(TELEGRAM_TOKEN, { polling: true });
 let waSock = null;
 let isPairing = false;
-
-// Perbaikan Total: Menggunakan initAuthCreds() bawaan resmi Baileys agar struktur 'me' otomatis valid
-let mockAuthState = {
-    state: {
-        creds: initAuthCreds(),
-        keys: {
-            get: (type, ids) => null,
-            set: (data) => {}
-        }
-    },
-    saveCreds: () => {}
-};
 
 // ==========================================
 // TAMPILAN MENU UTAMA (AESTHETIC STYLE)
@@ -75,12 +63,16 @@ tgBot.on('message', async (msg) => {
         tgBot.sendMessage(chatId, '⏳ <i>Sedang menyiapkan mesin & meminta kode dari server WhatsApp...</i>', { parse_mode: 'HTML' });
         
         try {
-            // Menggunakan auth state yang strukturnya 100% valid agar tidak memicu crash internal 'me'
+            // SOLUSI UTAMA: Disimpan di folder /tmp/ yang diizinkan menulis oleh GitHub Actions
+            const { state, saveCreds } = await useMultiFileAuthState('/tmp/wa_session');
+
             waSock = makeWASocket({
-                auth: mockAuthState,
+                auth: state,
                 logger: pino({ level: 'silent' }),
                 printQRInTerminal: false
             });
+
+            waSock.ev.on('creds.update', saveCreds);
 
             let formattedNum = text.replace(/[^0-9]/g, '');
             await delay(3000);
