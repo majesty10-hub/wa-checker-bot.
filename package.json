@@ -1,15 +1,14 @@
 {
-  "name": "wa-checker",
-  "version": "1.0.0",
+  "name": "wa-checker-bot",
+  "version": "5.0.0",
+  "description": "WhatsApp Checker Bot via GitHub Actions",
   "main": "index.js",
-  "scripts": {
-    "start": "node index.js"
-  },
   "dependencies": {
     "@whiskeysockets/baileys": "^6.6.0",
     "node-telegram-bot-api": "^0.66.0",
-    "pino": "^9.0.0",
-    "axios": "^1.6.0"
+    "pino": "^8.19.0"
+  },
+  "scripts": {
+    "start": "node index.js"
   }
 }
-
