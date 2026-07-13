@@ -43,7 +43,7 @@ async function hubungkanKeWhatsApp(nomorHPTumbal = null, chatId = null, isRetry 
 
     const { state, saveCreds } = await useMultiFileAuthState(sessionDir);
     
-    // Konfigurasi paten menyamar jadi Chrome Linux biar bypass blokir IP
+    // Bypass Proteksi IP dengan Chrome Linux User-Agent terbaru
     sock = makeWASocket({ 
         auth: state, 
         logger: pino({ level: 'silent' }), 
@@ -51,7 +51,7 @@ async function hubungkanKeWhatsApp(nomorHPTumbal = null, chatId = null, isRetry 
         connectTimeoutMs: 60000,
         defaultQueryTimeoutMs: 0,
         syncFullHistory: false,
-        browser: ["Linux", "Chrome", "121.0.0.0"]
+        browser: ["Chrome (Linux)", "Chrome", "131.0.0.0"]
     });
 
     sock.ev.on('creds.update', saveCreds);
@@ -68,7 +68,7 @@ async function hubungkanKeWhatsApp(nomorHPTumbal = null, chatId = null, isRetry 
                     fs.rmSync(sessionDir, { recursive: true, force: true });
                 }
                 if (chatId) {
-                    bot.sendMessage(chatId, `🚨 **[CRITICAL ALERT - SENDER BANNED]**\nSesi mati/terblokir. Ketuk tombol di bawah untuk menyambungkan ulang:`, {
+                    bot.sendMessage(chatId, `🚨 **[CRITICAL ALERT - SENDER BANNED]**\nSesi mati atau terblokir. Ketuk tombol di bawah untuk menyambungkan ulang:`, {
                         parse_mode: 'Markdown',
                         reply_markup: { inline_keyboard: [[{ text: "⚡ Hubungkan Sender Baru", callback_data: "sambungkan" }]] }
                     });
